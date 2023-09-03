@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      .order-item {
+        width: 300px;
+        height: 250px;
+        background: blue;
+        color: white;
+        margin: 10px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .order-item img {
+        width: 100%;
+        height: auto;
+      }
+
+      .foodDesciption {
+        padding: 10px;
+      }
+
+      .order-button {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: white;
+        color: blue;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+      }
+
+      .order-item.clicked {
+        animation: moveItemToBasket 0.6s forwards;
+      }
+
+      @keyframes moveItemToBasket {
+        0% {
+          transform: translate(0, 0);
+        }
+        100% {
+          transform: translate(100%, -100%);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="basket-icon">
+        <span>Basket icon</span>
+      </div>
+    </nav>
+    <br />
+    <main>
+      <div class="order-item">
+        <img src="food.jpg" alt="goat meat" />
+        <div class="foodDesciption">
+          Lorem ipsum, dolor sit amet consectetur adipisicing elit. Nobis
+          officia, soluta facilis fuga itaque, odio autem similique amet
+          consectetur rerum, atque aut! Id illum ipsam vero totam veritatis
+          doloremque accusamus!
+        </div>
+        <button class="order-button" onclick="moveToBasket(this)">Order</button>
+      </div>
+      <div class="order-item">
+        <img src="food.jpg" alt="goat meat" />
+        <div class="foodDesciption">
+          Lorem ipsum, dolor sit amet consectetur adipisicing elit. Nobis
+          officia, soluta facilis fuga itaque, odio autem similique amet
+          consectetur rerum, atque aut! Id illum ipsam vero totam veritatis
+          doloremque accusamus!
+        </div>
+        <button class="order-button" onclick="moveToBasket(this)">Order</button>
+      </div>
+      <div class="order-item">
+        <img src="food.jpg" alt="goat meat" />
+        <div class="foodDesciption">
+          Lorem ipsum, dolor sit amet consectetur adipisicing elit. Nobis
+          officia, soluta facilis fuga itaque, odio autem similique amet
+          consectetur rerum, atque aut! Id illum ipsam vero totam veritatis
+          doloremque accusamus!
+        </div>
+        <button class="order-button" onclick="moveToBasket(this)">Order</button>
+      </div>
+      <div class="order-item">
+        <img src="food.jpg" alt="goat meat" />
+        <div class="foodDesciption">
+          Lorem ipsum, dolor sit amet consectetur adipisicing elit. Nobis
+          officia, soluta facilis fuga itaque, odio autem similique amet
+          consectetur rerum, atque aut! Id illum ipsam vero totam veritatis
+          doloremque accusamus!
+        </div>
+        <button class="order-button" onclick="moveToBasket(this)">Order</button>
+      </div>
+      <div class="order-item">
+        <img src="food.jpg" alt="goat meat" />
+        <div class="foodDesciption">
+          Lorem ipsum, dolor sit amet consectetur adipisicing elit. Nobis
+          officia, soluta facilis fuga itaque, odio autem similique amet
+          consectetur rerum, atque aut! Id illum ipsam vero totam veritatis
+          doloremque accusamus!
+        </div>
+        <button class="order-button" onclick="moveToBasket(this)">Order</button>
+      </div>
+
+      <!-- Repeat the above order item code for other items -->
+    </main>
+    <script>
+      function moveToBasket(button) {
+        const orderItem = button.parentElement;
+        orderItem.classList.add("clicked");
+
+        setTimeout(() => {
+          orderItem.style.display = "none";
+          orderItem.classList.remove("clicked");
+          setTimeout(() => {
+            orderItem.style.display = "block";
+          }, 500);
+        }, 600);
+      }
+    </script>
+  </body>
+</html>
