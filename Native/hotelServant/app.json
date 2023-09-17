@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "hotelServant",
+    "slug": "hotelServant",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon1.jpg",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/icon1.jpg",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon1.jpg",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.marew.hotelServant"
+    },
+    "web": {
+      "favicon": "./assets/icon1.jpg"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6bbac424-4278-4fee-a3e4-fc18e2f0da1a"
+      }
+    }
+  }
+}

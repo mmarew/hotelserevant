@@ -8,6 +8,7 @@ const cors = require("cors");
 require("dotenv").config();
 const multer = require("multer");
 const fs = require("fs");
+const { error, table } = require("console");
 const tokenKey = process.env.backEndtokenKey;
 const port = process.env.backendPort;
 // Enable CORS for all routes
@@ -59,7 +60,7 @@ app.post("/login", async (req, res) => {
         res.json({ data: "WrongPassword" });
       }
     } else {
-      res.json({ data: "unregisteredPhoneNumber" });
+      res.json({ data: "unregisteredPhoneNumber", username });
     }
   } catch (error) {
     res.json({ data: "error", error });
@@ -119,19 +120,29 @@ async function CreateTables() {
     // SQL query to create the table
     // ProductName, description, price, image;
     // payed;
+
+    let usersTable = `CREATE TABLE IF NOT EXISTS hotelServiceUsers ( id INT AUTO_INCREMENT PRIMARY KEY,  usersFullName VARCHAR(255) NOT NULL,  password VARCHAR(255) NOT NULL, passwordResetPin int, PreparationTime varchar(90) not null, status VARCHAR(255) NOT NULL,  phoneNumber VARCHAR(255) NOT NULL, BusinessName varchar (60),Authority varchar(30))`;
+
+    let createOrderTable = `CREATE TABLE IF NOT EXISTS ordersTable (  orderId INT AUTO_INCREMENT PRIMARY KEY,tableNumber VARCHAR(900),outOfOursAddress VARCHAR(900),  orderBy INT NOT NULL,hotelOwnerId INT NOT NULL,orderContent VARCHAR(99999) NOT NULL,orderedTime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,  deliveryTime DATETIME, servedByHotelSide int, orderStatus ENUM('ordered', 'Delivered', 'cancelled by user', 'cancelled by hotel') NOT NULL DEFAULT 'ordered',cancellationReason VARCHAR(255),cancellationTime DATETIME,cancellationInitiator ENUM('user', 'hotel owner'),cancellationNotificationSent ENUM('noNeed','prepared','sent','verified') NOT NULL DEFAULT 'noNeed')`;
+    // servedByHotelSide is serevant id
+
+    let Create = `CREATE TABLE IF NOT EXISTS employeesTable (jobId INT AUTO_INCREMENT PRIMARY KEY,  employeeId INT NOT NULL,  employerId INT NOT NULL,  TableNumbers VARCHAR(255),  status ENUM('active', 'waiting', 'fired'))`;
+    pool
+      .query(Create)
+      .then((responces) => {
+        console.log("employeesTable created well");
+      })
+      .catch((error) => console.log(error));
     let createTable = `create table if not exists TableNumbers(TableId int AUTO_INCREMENT PRIMARY KEY,tableNumber varchar(900), ownerId int not null,OthersDetail varchar(300))`;
     let [results] = await pool.query(createTable);
     if (results) {
       console.log("TableNumbers created well");
     }
-    let createOrderTable =
-      "CREATE TABLE if not exists ordersTable (orderId INT AUTO_INCREMENT PRIMARY KEY,tableNumber varchar(900), outOfOursAddress varchar(900),orderBy int not null, hotelOwnerId int not null, orderContent VARCHAR(2555) NOT NULL,orderStatus VARCHAR(255) NOT NULL default 'ordered' )";
     [results] = await pool.query(createOrderTable);
     if (results) {
       //console.log("ordersTable created well");
     }
     const createTableQuery = `CREATE TABLE if not exists menu_items ( id INT AUTO_INCREMENT PRIMARY KEY, ProductName VARCHAR(255) NOT NULL, description VARCHAR(255) NOT NULL, price DECIMAL(10, 2) NOT NULL, imageUrl VARCHAR(255) , filesName varchar(3000),ownerId VARCHAR(255) NOT NULL, status VARCHAR(255) NOT NULL )`;
-    let usersTable = `CREATE TABLE IF NOT EXISTS hotelServiceUsers ( id INT AUTO_INCREMENT PRIMARY KEY,  usersFullName VARCHAR(255) NOT NULL,  password VARCHAR(255) NOT NULL, PreparationTime varchar(90) not null, status VARCHAR(255) NOT NULL,  phoneNumber VARCHAR(255) NOT NULL, BusinessName varchar (60))`;
 
     [results] = await pool.query(usersTable);
     if (results) {
@@ -170,9 +181,7 @@ const insertMenuItems = async (menuItem, fileName, res) => {
     if (results.length == 0)
       return res.json({ data: "this phone number is not registerd before." });
 
-    const query = `INSERT INTO menu_items (ProductName, description, price, imageUrl,filesName ,ownerId, PreparationTime,status)
-
-               VALUES (?, ?, ?, ?, ?, ?,?,?)`;
+    const query = `INSERT INTO menu_items (ProductName, description, price, imageUrl,filesName ,ownerId, PreparationTime,status) VALUES (?, ?, ?, ?, ?, ?,?,?)`;
     const values = [
       ProductName,
       description,
@@ -195,11 +204,10 @@ const insertMenuItems = async (menuItem, fileName, res) => {
 };
 app.get("/getMenuItems/:hotelName", async (req, res) => {
   const { hotelName } = req.params;
-  // console.log("hotelName", hotelName);
+  console.log("hotelName", hotelName);
   try {
     const token = req.headers.authorization;
-    // console.log("req.headers.authorization", req.headers.authorization);
-    // return;
+
     let query = "";
     let userId = 0;
     let isOwner = "NO";
@@ -209,10 +217,11 @@ app.get("/getMenuItems/:hotelName", async (req, res) => {
     //   query = `SELECT * FROM menu_items where ownerId='${userId}'`;
     // }
 
-    query = `SELECT * FROM menu_items,hotelServiceUsers where hotelServiceUsers.id=menu_items.ownerId and menu_items.status='available'`;
-
+    query = `SELECT * FROM menu_items,hotelServiceUsers where hotelServiceUsers.id=menu_items.ownerId and menu_items.status='available' and hotelServiceUsers.status='active' order by menu_items.id  limit 40 `;
+    // available and notavailable is to menu_items
+    // active vs disable is to hotelServiceUsers
     if (hotelName !== undefined && hotelName !== "undefined") {
-      query += ` and BusinessName='${hotelName}'`;
+      query = `SELECT * FROM menu_items,hotelServiceUsers where hotelServiceUsers.id=menu_items.ownerId and menu_items.status='available' and BusinessName='${hotelName}' order by menu_items.id`;
     }
 
     const [results] = await pool.query(query);
@@ -312,29 +321,22 @@ app.put("/orderToKitchen", async (req, res) => {
       selectedAddress,
       phoneNumber,
       specificAddress,
+      orderDate,
     } = req.body;
-    console.log(
-      "OrderBasket, token, tableNumber,selectedAddress ,phoneNumber,specificAddress",
-      // OrderBasket,
-      // token,
-      tableNumber,
-      selectedAddress,
-      phoneNumber,
-      specificAddress
-    );
-    // return;
+
     let userId = 0;
     if ((token != null && token) != "null" && token != undefined && token != "")
       userId = jwt.verify(token, tokenKey).userId;
     let firstOrder = OrderBasket[0];
     //console.log("firstOrder.OwnerId", OrderBasket[0].ownerId);
     let OwnerId = jwt.verify(firstOrder.ownerId, tokenKey).userId;
-    let sqlToInsert = `INSERT INTO ordersTable (orderBy, hotelOwnerId, orderContent,tableNumber) VALUES (?, ?, ?,?)`;
+    let sqlToInsert = `INSERT INTO ordersTable (orderBy, hotelOwnerId, orderContent,tableNumber,orderedTime) VALUES (?,?,?,?,?)`;
     let orderValues = [
       userId,
       OwnerId,
       JSON.stringify(OrderBasket),
       tableNumber,
+      orderDate,
     ];
     if (tableNumber == "Others") {
       orderValues = [
@@ -355,49 +357,7 @@ app.put("/orderToKitchen", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
-
-// app.get("/getRecivedOrders", async (req, res) => {
-//   try {
-//     const token = req.headers.authorization;
-//     let userId = 0;
-//     if (token != null && token != "null" && token != undefined && token != "")
-//       userId = jwt.verify(token, tokenKey).userId;
-//     // Process the token or perform any required actions
-//     // Send the response
-//     let select = `select * from ordersTable where hotelOwnerId='${userId}' and orderStatus='ordered'`;
-
-//     let [results] = await pool.query(select);
-
-//     res.json({ message: results });
-//   } catch (error) {
-//     console.error("An error occurred:", error);
-//     res.status(500).json({ error: "Internal Server Error" });
-//   }
-// });
-// app.post("/getWaitingOrders", async (req, res) => {
-//   try {
-//     const token = req.body.token;
-//     let savedOrders = JSON.parse(req.body.savedOrders);
-//     let userId = 0;
-//     if (token != "null" && token != null && token != undefined && token != "")
-//       userId = jwt.verify(token, tokenKey).userId;
-//     // console.log(" savedOrders", savedOrders[0]);
-//     let bySavedOrders = "",
-//       select = `SELECT * FROM ordersTable WHERE orderBy='${userId}'  AND orderStatus='ordered'`;
-//     if (Array.isArray(savedOrders)) {
-//       bySavedOrders = ` OR orderId IN (${savedOrders?.join(",")}))`;
-//       select = `SELECT * FROM ordersTable WHERE (orderBy='${userId}' ${bySavedOrders}  AND orderStatus='ordered'`;
-//     }
-
-//     let [results] = await pool.query(select);
-
-//     res.json({ message: results });
-//   } catch (error) {
-//     console.error("An error occurred:", error);
-//     res.status(500).json({ error: "Internal Server Error" });
-//   }
-// });
-app.get("/getRecivedOrders", async (req, res) => {
+app.get("/getRecivedAndSentOrders", async (req, res) => {
   try {
     const token = req.headers.authorization;
     let userId = 0;
@@ -405,9 +365,39 @@ app.get("/getRecivedOrders", async (req, res) => {
       userId = jwt.verify(token, tokenKey).userId;
     // Process the token or perform any required actions
     // Send the response
-    let select = `select * from ordersTable where hotelOwnerId=? and orderStatus='ordered'`;
+    // let select = `select * from ordersTable where hotelOwnerId=? and (orderStatus='ordered' or (cancellationNotificationSent='prepared' and orderStatus='cancelled by user'))`;
+    let getMyEmployyersTableNumbers = `select * from employeesTable where employeeId='${userId}' and status='active'`;
+    let myData = [];
+    await pool
+      .query(getMyEmployyersTableNumbers)
+      .then(([data]) => {
+        // console.log(data);
+        myData = data;
+      })
+      .catch((error) => {
+        console.log(error);
+      });
+    let myTableNumbers = myData[0]?.TableNumbers;
+    // Convert the array to a string in the desired format
+    let tableNumberString = "",
+      select = "";
+    if (myTableNumbers) {
+      // your business plus your employeers business
+      myTableNumbers = JSON.parse(myTableNumbers);
+      tableNumberString = `(${myTableNumbers
+        .map((value) => `'${value}'`)
+        .join(", ")})`;
+      // console.log("tableNumberString", tableNumberString);
+      select = `SELECT * FROM employeesTable, ordersTable WHERE ((employeeId = '${userId}' AND employerId = hotelOwnerId AND ordersTable.tableNumber IN ${tableNumberString}) OR hotelOwnerId = '${userId}' ) AND ( orderStatus = 'ordered' OR  (cancellationNotificationSent = 'prepared' AND orderStatus = 'cancelled by user') )`;
+      // select = `select * from employeesTable,ordersTable where ((employeeId='${userId}' and employerId=hotelOwnerId and TableNumbers in ${tableNumberString}) or hotelOwnerId='${userId}') and (orderStatus='ordered' or (cancellationNotificationSent='prepared' and orderStatus='cancelled by user'))`;
+    } else {
+      //your business only
+      select = `select * from ordersTable where hotelOwnerId='${userId}' and (orderStatus='ordered' or (cancellationNotificationSent='prepared' and orderStatus='cancelled by user'))`;
+    }
 
-    let [resultsOfOrderRecived] = await pool.query(select, [userId]);
+    //  `CREATE TABLE IF NOT EXISTS employeesTable (jobId INT AUTO_INCREMENT PRIMARY KEY,  employeeId INT NOT NULL,  employerId INT NOT NULL,  TableNumbers VARCHAR(255),  status ENUM('active', 'waiting', 'fired'))`;
+    let [resultsOfOrderRecived] = await pool.query(select);
+    // console.log("resultsOfOrderRecived", resultsOfOrderRecived);
     let savedOrders = req.query.savedOrders;
     // console.log("savedOrders", savedOrders);
     //Get my order requests to
@@ -415,23 +405,17 @@ app.get("/getRecivedOrders", async (req, res) => {
       savedOrders = JSON.parse(req.query.savedOrders); //orders id saved in browser localstorages
 
     let bySavedOrders = "";
-    select = `SELECT * FROM ordersTable WHERE orderBy='${userId}'  AND orderStatus='ordered'`;
+    select = `SELECT * FROM ordersTable WHERE orderBy='${userId}'  AND (orderStatus='ordered' or (cancellationNotificationSent='prepared' and orderStatus='cancelled by hotel')  or orderStatus='Delivered')`;
     if (Array.isArray(savedOrders)) {
       bySavedOrders = ` OR orderId IN (${savedOrders?.join(",")}))`;
-      select = `SELECT * FROM ordersTable WHERE (orderBy='${userId}' ${bySavedOrders}  AND orderStatus='ordered'`;
+      select = `SELECT * FROM ordersTable WHERE (orderBy='${userId}' ${bySavedOrders} AND (orderStatus='ordered' or (cancellationNotificationSent='prepared' and orderStatus='cancelled by hotel') or orderStatus='Delivered')`;
     }
-
     let [resultsOfOrderRequest] = await pool.query(select);
-    // console.log(
-    //   "resultsOfOrderRecived",
-    //   resultsOfOrderRecived,
-    //   "resultsOfOrderRequest",
-    //   resultsOfOrderRequest
-    // );
+
     res.json({
-      message: resultsOfOrderRequest,
-      resultsOfOrderRequest,
-      resultsOfOrderRecived,
+      // message: resultsOfOrderRequest,
+      resultsOfOrderRequest: resultsOfOrderRequest,
+      resultsOfOrderRecived: resultsOfOrderRecived,
     });
   } catch (error) {
     console.error("An error occurred:", error);
@@ -510,8 +494,11 @@ app.put("/updateUsersProfile", async (req, res) => {
 });
 app.put("/updateDeliverySuccess", async (req, res) => {
   try {
-    let { orderId, orderStatus } = req.body.ORDEREDITEMS;
-    let select = `update ordersTable set orderStatus='Delivered' where  orderId='${orderId}' and orderStatus='ordered'`;
+    let { orderId, orderStatus, deliveryTime, token } = req.body.ORDEREDITEMS;
+    // lllllllllllllll
+    if (token == "undefined") throw "login first";
+    let serevantId = jwt.verify(token, tokenKey);
+    let select = `update ordersTable set orderStatus='Delivered',deliveryTime='${deliveryTime}',servedByHotelSide='${serevantId}' where  orderId='${orderId}' and orderStatus='ordered'`;
     let response = await pool.query(select);
     res.json({ data: "SUCCESS", response });
   } catch (error) {
@@ -553,10 +540,11 @@ app.get("/searchBusiness", async (req, res) => {
   try {
     const targetedSearch = req.headers.searchquery;
     const select = `SELECT * FROM hotelServiceUsers WHERE usersFullName LIKE '${targetedSearch}%'`;
-
+    let searchByMenueItem = `SELECT * FROM  menu_items,hotelServiceUsers where  ProductName LIKE '${targetedSearch}%' and menu_items.ownerId=hotelServiceUsers.id`;
+    const [SearchedByProducts] = await pool.query(searchByMenueItem);
     const [results] = await pool.query(select);
-
-    res.json({ data: results });
+    2;
+    res.json({ data: results, dataByProductName: SearchedByProducts });
   } catch (error) {
     console.error("Error executing query:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -589,20 +577,65 @@ app.post("/insertTableNumbers", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
-app.post("/getTableNumbers", async (req, res) => {
-  let { userId } = jwt.verify(req.body.ownerId, tokenKey);
-  let select = `select * from TableNumbers where ownerId=?`;
-  let values = [userId];
-  pool
-    .query(select, values)
-    .then(([result]) => {
-      console.log(result);
-      res.json({ data: result });
-    })
-    .catch((error) => {
-      console.log(error);
-    });
-  // res.json({ data: req.body });
+app.get("/getTableNumbersByOwnersId", async (req, res) => {
+  try {
+    let token = req.query.ownerId;
+    console.log("token is== ", token);
+    if (
+      token == "" ||
+      token == "null" ||
+      token == null ||
+      token == undefined ||
+      token == "undefined"
+    ) {
+      return res.json({ data: "not a valied token" });
+    }
+    let { userId } = jwt.verify(token, tokenKey);
+    let select = `select * from TableNumbers where ownerId=?`;
+    let values = [userId];
+    pool
+      .query(select, values)
+      .then(([result]) => {
+        // console.log(result);
+        res.json({ data: result });
+      })
+      .catch((error) => {
+        console.log(error);
+      });
+  } catch (error) {
+    console.log(error);
+    res.json({ data: "error 67" });
+  }
+});
+app.get("/getTableNumbers", async (req, res) => {
+  try {
+    let token = req.headers.authorization;
+    // console.log("token is== ", token);
+    if (
+      token == "" ||
+      token == "null" ||
+      token == null ||
+      token == undefined ||
+      token == "undefined"
+    ) {
+      return res.json({ data: "not a valied token" });
+    }
+    let { userId } = jwt.verify(token, tokenKey);
+    let select = `select * from TableNumbers where ownerId=?`;
+    let values = [userId];
+    pool
+      .query(select, values)
+      .then(([result]) => {
+        // console.log(result);
+        res.json({ data: result });
+      })
+      .catch((error) => {
+        console.log(error);
+      });
+  } catch (error) {
+    console.log(error);
+    res.json({ data: "error 67" });
+  }
 });
 app.get("/getMyItems", (req, res) => {
   let token = req.headers.authorization;
@@ -616,7 +649,7 @@ app.get("/getMyItems", (req, res) => {
     .catch(() => {});
 });
 
-app.put("/editItem/:editItemId", upload.single("file"), (req, res) => {
+app.put("/editItem/:editItemId", upload.single("file"), async (req, res) => {
   const uploadDir = path.join(__dirname, "uploads"); // Update the directory path accordingly
   console.log("uploadDir", uploadDir);
   // return;
@@ -630,22 +663,6 @@ app.put("/editItem/:editItemId", upload.single("file"), (req, res) => {
   let { userId } = jwt.verify(Token, tokenKey);
   let fileName = "NoFile";
 
-  // Delete the previous file if it exists
-  if (req.file)
-    pool
-      .query("SELECT filesName FROM menu_items WHERE id = ?", [editItemId])
-      .then(([result]) => {
-        const previousFileName = result[0].filesName;
-        if (previousFileName !== "NoFile") {
-          const previousFilePath = path.join(uploadDir, previousFileName);
-          fs.unlinkSync(previousFilePath);
-          console.log("Previous file deleted:", previousFileName);
-        }
-      })
-      .catch((error) => {
-        console.error("Error deleting previous file: ", error);
-      });
-
   if (req.file) {
     let originalFilename = req.file.originalname;
     let uniqueFilename = generateUniqueFilename(originalFilename);
@@ -656,22 +673,53 @@ app.put("/editItem/:editItemId", upload.single("file"), (req, res) => {
     fs.renameSync(req.file.path, filePath);
   }
   const { ProductName, description, imageUrl, price } = req.body;
-  console.log("req.body", req.body);
 
-  const query =
-    "UPDATE menu_items SET ProductName=?,description=?,price=?,imageUrl=?,filesName=?,ownerId=? ,status=? WHERE id = ?";
-  // `CREATE TABLE if not exists menu_items ( id INT AUTO_INCREMENT PRIMARY KEY, ProductName VARCHAR(255) NOT NULL, description VARCHAR(255) NOT NULL, price DECIMAL(10, 2) NOT NULL, imageUrl VARCHAR(255) , filesName varchar(3000),ownerId VARCHAR(255) NOT NULL, status VARCHAR(255) NOT NULL )`;
-  pool
-    .query(query, [
+  let query =
+      "UPDATE menu_items SET ProductName=?,description=?,price=?,imageUrl=?,filesName=?,ownerId=?  WHERE id = ?",
+    queryValues = [
       ProductName,
       description,
       price,
       imageUrl,
       fileName,
       userId,
-      "active",
       editItemId,
-    ])
+    ];
+  // Delete the previous file if it exists
+  if (req.file)
+    await pool
+      .query("SELECT filesName FROM menu_items WHERE id = ?", [editItemId])
+      .then(([result]) => {
+        const previousFileName = result[0].filesName;
+        if (
+          previousFileName !== "NoFile" &&
+          previousFileName != undefined &&
+          previousFileName != "null" &&
+          previousFileName != null &&
+          req.file != "undefined"
+        ) {
+          const previousFilePath = path.join(uploadDir, previousFileName);
+          fs.unlinkSync(previousFilePath);
+          console.log("Previous file deleted:", previousFileName);
+        }
+      })
+      .catch((error) => {
+        console.error("Error deleting previous file: ", error);
+      });
+  else {
+    query =
+      "UPDATE menu_items SET ProductName=?,description=?,price=?,imageUrl=?,ownerId=?  WHERE id = ?";
+    queryValues = [
+      ProductName,
+      description,
+      price,
+      imageUrl,
+      userId,
+      editItemId,
+    ];
+  }
+  pool
+    .query(query, queryValues)
     .then((results) => {
       if (results.affectedRows === 0) {
         res.status(404).json({ data: "Item not found" });
@@ -796,21 +844,460 @@ app.post("/updateMenueItemStatus", (req, res) => {
     });
 });
 app.post("/cancelMyOrderRequest", (req, res) => {
-  // res.json({ data: req.body });
-  let { token, orderId } = req.body;
-  if (token == null || token == undefined || token == "" || token == "null") {
-    return res.json({ data: "unable to do" });
+  try {
+    let { token, orderId, canceledBy, cancellationTime } = req.body;
+
+    let update = `update ordersTable set orderStatus='${canceledBy}',cancellationTime='${cancellationTime}',cancellationNotificationSent='prepared' where orderId='${orderId}' and orderStatus ='ordered'`;
+    if ((canceledBy = `cancelled by hotel`)) {
+      if (
+        token == null ||
+        token == undefined ||
+        token == "" ||
+        token == "null"
+      ) {
+        // if login is nececcery enable the following data
+        return res.json({ data: "Please login first." });
+      }
+      let { userId } = jwt.verify(token, tokenKey);
+      update = `update ordersTable set orderStatus='${canceledBy}',cancellationTime='${cancellationTime}',
+    	servedByHotelSide='${userId}'
+    cancellationNotificationSent='prepared' where orderId='${orderId}' and orderStatus ='ordered'`;
+    }
+
+    pool
+      .query(update)
+      .then(([results]) => {
+        if (results.affectedRows >= 0) res.json({ data: "updated" });
+      })
+      .catch((error) => {
+        console.log(error);
+        res.json({ data: "data" });
+      });
+  } catch (error) {
+    console.log("error", error);
+    res.json({ data: "error no 900" });
   }
-  let update = `update ordersTable set orderStatus='canceled by user' where orderId='${orderId}' and orderStatus ='ordered'`;
-  // affectedRows
+});
+// Route for generating reset code
+app.post("/generate-code", async (req, res) => {
+  const { phoneNumber } = req.body;
+  const resetCode = Math.floor(100000 + Math.random() * 900000);
+  try {
+    // Store the reset code in the database  hotelServiceUsers passwordResetPin;
+    await pool.query(
+      "update hotelServiceUsers set passwordResetPin=? where phoneNumber=?",
+      [resetCode, phoneNumber]
+    );
+    // TODO: Send the reset code to the user (e.g., via SMS or email)
+    res.json({ message: "Reset code generated successfully." });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "An error occurred. Please try again later." });
+  }
+});
+// Route for verifying reset code
+app.post("/verify-code", async (req, res) => {
+  const { phoneNumber, resetCode } = req.body;
+
+  try {
+    // Check if the reset code matches the one stored in the database
+    const [rows] = await pool.query(
+      "SELECT * FROM hotelServiceUsers WHERE phoneNumber = ? AND passwordResetPin = ?",
+      [phoneNumber, resetCode]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Invalid reset code." });
+    }
+
+    res.json({ message: "Reset code verified successfully." });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "An error occurred. Please try again later." });
+  }
+});
+
+// Route for resetting password
+app.post("/reset-password", async (req, res) => {
+  const { phoneNumber, newPassword } = req.body;
+  try {
+    const currentlyHashedPassword = await bcrypt.hash(newPassword, 10);
+    // Update the user's password in the database
+    await pool.query(
+      "UPDATE hotelServiceUsers SET password = ? WHERE phoneNumber= ?",
+      [currentlyHashedPassword, phoneNumber]
+    );
+
+    // TODO: Perform additional password reset logic if needed
+
+    res.json({ message: "Password reset successful." });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "An error occurred. Please try again later." });
+  }
+});
+app.get("/getUsers", (req, res) => {
+  let token = req.headers.authorization;
+  console.log("token", token);
+  let { userId } = jwt.verify(token, tokenKey);
+  let select = `select * from hotelServiceUsers where id='${userId}'`;
   pool
-    .query(update)
+    .query(select)
     .then(([results]) => {
-      if (results.affectedRows >= 0) res.json({ data: "updated" });
+      let Authority = results[0]?.Authority;
+      if (Authority == "Admin") {
+        select = `select * from hotelServiceUsers`;
+        pool
+          .query(select)
+          .then(([responces]) => {
+            res.json({ data: responces });
+          })
+          .catch((error) => {
+            console.log(error);
+            res.json({ data: "Error on data" });
+          });
+      } else {
+        res.json({ data: "sorry page not found" });
+      }
     })
     .catch((error) => {
       console.log(error);
-      res.json({ data: "data" });
+    });
+  // res.json({ data: [{ id: "opopopo", name: "mmm", email: "email" }] });
+});
+app.get("/getfoodItems", (req, res) => {
+  let token = req.headers.authorization;
+  console.log("token", token);
+  let { userId } = jwt.verify(token, tokenKey);
+  //  SELECT * FROM menu_items
+  let select = `select * from hotelServiceUsers where id='${userId}'`;
+  pool
+    .query(select)
+    .then(([results]) => {
+      let Authority = results[0]?.Authority;
+      if (Authority == "Admin") {
+        select = `SELECT * FROM menu_items`;
+        pool
+          .query(select)
+          .then(([responces]) => {
+            res.json({ data: responces });
+          })
+          .catch((error) => {
+            console.log(error);
+            res.json({ data: "Error on data" });
+          });
+      } else {
+        res.json({ data: "sorry page not found" });
+      }
+    })
+    .catch((error) => {
+      console.log(error);
+    });
+
+  // res.json({
+  //   data: [
+  //     {
+  //       id: "opopopo",
+  //       name: "mmm",
+  //       description: "description description description",
+  //     },
+  //   ],
+  // });
+});
+app.delete("/deleteUsers/:userId", (req, res) => {
+  const userId = req.params.userId;
+  let { action } = req.query;
+  console.log(action);
+  let update = `update hotelServiceUsers  set status='${action}' where id='${userId}'`;
+  pool
+    .query(update)
+    .then(([results]) => {
+      res.json({ data: results });
+    })
+    .catch((error) => {
+      res.json({ data: "error" });
     });
 });
-("CREATE TABLE if not exists ordersTable (orderId INT AUTO_INCREMENT PRIMARY KEY,tableNumber varchar(900), outOfOursAddress varchar(900),orderBy int not null, hotelOwnerId int not null, orderContent VARCHAR(2555) NOT NULL,orderStatus VARCHAR(255) NOT NULL default 'ordered' )");
+app.delete("/deletefoodItems", (req, res) => {
+  res.json({ data: "deletefoodItems" });
+});
+app.put("/verifyCancellationByUser", (req, res) => {
+  // res.json({ data: req.body.orderItems });
+  let { cancellationNotificationSent, orderId, token, hotelOwnerId } =
+    req.body.orderItems;
+  // console.groupEnd(token);
+  let { userId } = jwt.verify(token, tokenKey);
+  let updateOrders = `update ordersTable set cancellationNotificationSent='verified' where orderId='${orderId}' and cancellationNotificationSent='${cancellationNotificationSent}' and hotelOwnerId='${userId}'`;
+  console.log("updateOrders", updateOrders);
+  pool
+    .query(updateOrders)
+    .then(([results]) => {
+      if (results.affectedRows > 0) {
+        res.json({ data: "updated" });
+      } else {
+        res.json({ data: "data not found" });
+      }
+    })
+    .catch((error) => {
+      console.log("error is ", error);
+      res.json({ data: "error" });
+    });
+});
+app.put("/verifyCancellationByHotel", (req, res) => {
+  // res.json({ data: req.body });
+  let { token, item } = req.body,
+    userId = 0,
+    { orderId } = item;
+  if (
+    token != undefined &&
+    token != "null" &&
+    token != "" &&
+    token != "undefined" &&
+    token != null
+  ) {
+    userId = jwt.verify(token, tokenKey).userId;
+    // res.json({ data: userId });
+  } else {
+    // return res.json({ data: "please login first" });
+  }
+  let update = `update ordersTable set cancellationNotificationSent='verified' where orderId='${orderId}' and orderBy='${userId}'`,
+    { orderContent } = item;
+
+  if (userId == 0) {
+    update = `update ordersTable set cancellationNotificationSent='verified' where orderId='${orderId}' and orderContent='${orderContent}'`;
+  }
+  pool
+    .query(update)
+    .then(([data]) => {
+      if (data.affectedRows > 0) res.json({ data: "updated" });
+      else {
+        res.json({ data: "not found" });
+      }
+    })
+    .catch((error) => {
+      console.log(error);
+    });
+});
+
+app.put("/verifyDeliveryofItemsByHotel", (req, res) => {
+  console.log(req.body);
+  let { item, token } = req.body,
+    { orderId } = item;
+  let userId = "";
+  if (
+    token !== "null" &&
+    token !== null &&
+    token !== "" &&
+    token !== undefined &&
+    token !== "undefined"
+  ) {
+    userId = jwt.verify(token, tokenKey);
+  }
+
+  // orderId: 21;
+  // orderStatus: "Delivered";
+  let Update = `update ordersTable set orderStatus='verified' where orderId='${orderId}'`;
+  pool
+    .query(Update)
+    .then(([results]) => {
+      if (results.affectedRows > 0) {
+        res.json({ data: "updated" });
+      } else {
+        res.json({ data: "not found", Update });
+      }
+      console.log("results", results);
+    })
+    .catch((error) => {
+      res.json({ data: "error" });
+    });
+});
+
+// Route for getting a password reset PIN
+app.get("/getPasswordResetPin", (req, res) => {
+  // Check if the phone number exists in the database
+  pool
+    .query(
+      "SELECT passwordResetPin, phoneNumber FROM hotelServiceUsers where passwordResetPin !='' && passwordResetPin !='password sent' ORDER BY id LIMIT 10"
+    )
+    .then(([results]) => {
+      // console.log(results);
+      if (results.length === 0) {
+        console.error("No password reset PINS found.");
+        res.status(404).json({ error: "No password reset PINS found." });
+        return;
+      }
+
+      // Return the password reset PINS to the client
+      let phoneNumber = results[0].phoneNumber,
+        pinCode = results[0].passwordResetPin;
+      res.json({ phoneNumber, pinCode });
+    })
+    .catch((error) => {
+      console.error("Failed to get password reset PINS:", error);
+      res.status(500).json({ error: "Failed to get password reset PINS." });
+    });
+});
+app.get("/getMyTransaction", (req, res) => {
+  console.log("req.query", req.query);
+  let { fromDate, toDate } = req.query;
+  let token = req.headers.authorization;
+  if (token == null) return res.json({ data: "unable to login" });
+  let { userId } = jwt.verify(token, tokenKey);
+  let select = `SELECT * FROM ordersTable WHERE hotelOwnerId=${userId} AND orderedTime BETWEEN '${fromDate} 00:00:00' AND '${toDate} 00:00:00'`;
+  console.log("select", select);
+  pool
+    .query(select)
+    .then(([results]) => {
+      if (results.length > 0) res.json({ data: results });
+      else res.json({ data: "no data found" });
+    })
+    .catch((error) => {
+      console.log("error", error);
+      res.json({ data: "error" });
+    });
+});
+app.get("/searchEmployees", (req, res) => {
+  let NameOrPhone = req.query.NameOrPhone,
+    token = req.headers.authorization;
+  NameOrPhone = NameOrPhone.toString();
+  NameOrPhone = NameOrPhone.replace(" ", "");
+  console.log("NameOrPhone", typeof NameOrPhone);
+  if (NameOrPhone.startsWith("0")) {
+    NameOrPhone = NameOrPhone.substring(1);
+  }
+  if (
+    token == "" ||
+    token == "null" ||
+    token == null ||
+    token == undefined ||
+    token == "undefined"
+  ) {
+    return res.json({ data: "loginFirst" });
+  }
+  let select = `select * from hotelServiceUsers where phoneNumber 
+  like '%${NameOrPhone}%' or usersFullName like '%${NameOrPhone}%' or phoneNumber like '${NameOrPhone}%'`;
+  pool
+    .query(select)
+    .then(([results]) => {
+      let { userId } = jwt.verify(token, tokenKey);
+      let get = `select * from employeesTable,hotelServiceUsers where employerId='${userId}' and id=employeeId `;
+      // let get = `select * from employeesTable where employerId='${userId}'`;
+      pool
+        .query(get)
+        .then(([data]) => {
+          res.json({ data: results, myEmployees: data });
+          // res.json({ data: data });
+          // console.log(data);
+        })
+        .catch((error) => {
+          res.json({ data: "error" });
+          console.log(error);
+        });
+    })
+    .catch((error) => {
+      res.json({ data: "error" });
+    });
+  // res.json({ data: req.headers.authorization });
+});
+app.put("/addEmployees", (req, res) => {
+  try {
+    let { token, employee } = req.body;
+    let { userId } = jwt.verify(token, tokenKey);
+    let { id } = employee;
+    console.log(userId);
+    let select = `select * from employeesTable where employeeId='${id}' and employerId='${userId}'`;
+    pool
+      .query(select)
+      .then(([responces]) => {
+        if (responces.length > 0) {
+          return res.json({ data: "already employee" });
+        }
+        let insert = `insert into employeesTable (employeeId, employerId, status) values(?,?,?)`,
+          values = [id, userId, "active"];
+        pool
+          .query(insert, values)
+          .then(([results]) => {
+            if (results.affectedRows > 0) res.json({ data: "EmployeeAdded" });
+            else res.json({ data: "unableToaddEmployees" });
+          })
+          .catch((error) => {
+            console.log("error", error);
+            res.json({ data: "error no 56" });
+          });
+      })
+      .catch((error) => {
+        console.log(error);
+        res.json({ data: "error no 34" });
+      });
+  } catch (error) {
+    res.json({ data: "error no 33" });
+  }
+});
+app.get("/getMyEmployees", (req, res) => {
+  let token = req.headers.authorization;
+  console.log("token", token);
+  // return;
+  let { userId } = jwt.verify(token, tokenKey);
+  let get = `select * from employeesTable,hotelServiceUsers where employerId='${userId}' and id=employeeId `;
+  pool
+    .query(get)
+    .then(([data]) => {
+      res.json({ data: data });
+      console.log(data);
+    })
+    .catch((error) => {
+      res.json({ data: "error" });
+      console.log(error);
+    });
+  // res.json({ data: req.body });
+});
+app.delete("/removeMyemployee", (req, res) => {
+  // console.log(first)
+  console.log("req.body", req.body.token);
+  let { employee, token } = req.body;
+  if (
+    token == "" ||
+    token == "null" ||
+    token == "undefined" ||
+    token == null ||
+    token == undefined
+  ) {
+    return res.json({ data: "login first" });
+  }
+  let { id } = employee;
+  let { userId } = jwt.verify(token, tokenKey);
+  let deleteSQL = `delete from employeesTable where employeeId='${id}' and   employerId='${userId}'`;
+  pool
+    .query(deleteSQL)
+    .then(([data]) => {
+      if (data.affectedRows > 0) {
+        res.json({ data: "deleted succesfully" });
+      } else res.json({ data: "no data found" });
+    })
+    .catch((error) => {});
+  // res.json({ data: req.body });
+});
+app.put("/addTableNumbersToEmployee", (req, res) => {
+  let { selectedTableNumbers, SelectedEmployee } = req.body;
+  let { jobId } = SelectedEmployee;
+  let update = `update employeesTable set TableNumbers='${JSON.stringify(
+    selectedTableNumbers
+  )}' where jobId='${jobId}'`;
+  pool
+    .query(update)
+    .then(([data]) => {
+      if (data.affectedRows > 0) res.json({ data: "updated successfully" });
+      else res.json({ data: "data not found" });
+      console.log(data);
+    })
+    .catch((error) => {
+      res.json({ data: "error", error: "error" });
+      console.log(error);
+    });
+});
